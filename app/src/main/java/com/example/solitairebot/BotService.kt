@@ -227,7 +227,10 @@ class BotService : AccessibilityService() {
             val state = key(current)
             memo[state]?.let { return it }
             var best = Plan(0, -1)
-            val options = listOf(if (current == 1) 13 else current - 1, if (current == 13) 1 else current + 1)
+            val options = buildList {
+                if (current > 1) add(current - 1)
+                if (current < 13) add(current + 1)
+            }
             for (rank in options) {
                 if (counts[rank] == 0) continue
                 counts[rank]--
