@@ -60,7 +60,7 @@ class BotService : AccessibilityService() {
                 val enabled = !isRunning()
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_RUNNING, enabled).apply()
                 text = if (enabled) "■ 정지" else "▶ 시작"
-                if (enabled) boundGamePackage = null
+                if (enabled) boundGamePackage = rootInActiveWindow?.packageName?.toString()
             }
         }
         val params = WindowManager.LayoutParams(
@@ -158,6 +158,7 @@ class BotService : AccessibilityService() {
         }.minByOrNull { abs(it.bounds.centerX() - width * .56) + abs(it.bounds.centerY() - height * .87) }
 
         if (board.size >= 2 && waste != null && activePackage != null) boundGamePackage = activePackage
+        if (boundGamePackage == null && activePackage != null) boundGamePackage = activePackage
         if (boundGamePackage == null || activePackage != boundGamePackage) return
 
         val greenButtons = findGreenButtons(bitmap)
@@ -170,6 +171,14 @@ class BotService : AccessibilityService() {
 
         if (close != null && (hasCashPrice || isShop || (greenButtons.size >= 2 && !isLevelDialog))) {
             tap(close.first, close.second)
+            return
+        }
+
+        // The map screen in the supplied game has a large green level badge near the top-right.
+        // It appears before the level dialog, so it must be handled before any card is dealt.
+        val mapLevelButton = findMapLevelButton(bitmap)
+        if (waste == null && board.isEmpty() && close == null && mapLevelButton != null) {
+            tap(mapLevelButton.centerX(), mapLevelButton.centerY())
             return
         }
 
@@ -257,11 +266,24 @@ class BotService : AccessibilityService() {
     }
 
     private fun findGreenButtons(bitmap: Bitmap): List<Rect> = colorComponents(bitmap) { color ->
-        val r = Color.red(color); val g = Color.green(color); val b = Color.blue(color)
-        g > 145 && g > r * 1.22 && g > b * 1.08
+        isGreen(color)
     }.filter { rect ->
         rect.width() > bitmap.width * .065 && rect.height() > bitmap.height * .035 &&
             rect.centerY() in (bitmap.height * .42).toInt()..(bitmap.height * .80).toInt()
+    }
+
+    private fun findMapLevelButton(bitmap: Bitmap): Rect? = colorComponents(bitmap, ::isGreen)
+        .filter { rect ->
+            val ratio = rect.width().toFloat() / rect.height().coerceAtLeast(1)
+            rect.width() >= bitmap.width * .025 && rect.width() <= bitmap.width * .11 &&
+                rect.height() >= bitmap.height * .035 && rect.height() <= bitmap.height * .12 &&
+                ratio in .62f..1.42f && rect.centerX() > bitmap.width * .75 && rect.centerY() < bitmap.height * .36
+        }
+        .maxByOrNull { it.width() * it.height() }
+
+    private fun isGreen(color: Int): Boolean {
+        val r = Color.red(color); val g = Color.green(color); val b = Color.blue(color)
+        return g > 145 && g > r * 1.22 && g > b * 1.08
     }
 
     private fun findRedClose(bitmap: Bitmap): Pair<Int, Int>? {
